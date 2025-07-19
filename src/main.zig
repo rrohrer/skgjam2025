@@ -1,5 +1,6 @@
 const rl = @import("raylib");
 const std = @import("std");
+const builtin = @import("builtin");
 
 const Entity = struct {
     const Self = @This();
@@ -36,15 +37,31 @@ const Entity = struct {
     }
 };
 
+const Core = struct {
+    const Self = @This();
+
+    world: std.ArrayList(Entity),
+
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return Self{ .world = std.ArrayList(Entity).init(allocator) };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.world.deinit();
+    }
+};
+
 pub fn main() anyerror!void {
     // Initialization
     //--------------------------------------------------------------------------------------
     // Start by setting up an allocator for general use.
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    const allocator = if (builtin.os.tag == .emscripten) std.heap.c_allocator else gpa.allocator();
     defer {
-        const deinit_status = gpa.deinit();
-        if (deinit_status == .leak) std.testing.expect(false) catch @panic("There were leaks in the program.");
+        if (builtin.os.tag != .emscripten) {
+            const deinit_status = gpa.deinit();
+            if (deinit_status == .leak) std.testing.expect(false) catch @panic("There were leaks in the program.");
+        }
     }
 
     // window details
@@ -53,45 +70,48 @@ pub fn main() anyerror!void {
     rl.setConfigFlags(.{ .window_highdpi = true, .vsync_hint = true });
 
     rl.initWindow(screenWidth, screenHeight, "SKG Jam 2025");
-    defer rl.closeWindow(); // Close window and OpenGL context
 
-    rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
-    //--------------------------------------------------------------------------------------
-    var world = std.ArrayList(Entity).init(allocator);
-    defer world.deinit();
+    var core = Core.init(allocator);
+    defer core.deinit();
 
     const player = Entity.init(Entity.Data{ .Player = .{
         .health = 100,
         .move_speed = 200,
     } }, rl.Vector2.init(50, 50));
-    try world.append(player);
+    try core.world.append(player);
+    switch (builtin.os.tag) {
+        .emscripten => std.os.emscripten.emscripten_set_main_loop_arg(mainGameLoop, &core, 60, 1),
+        else => {
+            defer rl.closeWindow(); // Close window and OpenGL context
+            rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
 
-    // Main game loop
-    while (!rl.windowShouldClose()) { // Detect window close button or ESC key
-        // Update
-        //----------------------------------------------------------------------------------
-        // TODO: Update your variables here
-        //----------------------------------------------------------------------------------
-        const dt = rl.getFrameTime();
+            while (!rl.windowShouldClose()) { // Detect window close button or ESC key
+                mainGameLoop(&core);
+            }
+        },
+    }
+}
 
-        for (world.items) |*entity| {
-            updateEntity(dt, entity);
-        }
+fn mainGameLoop(input: ?*anyopaque) callconv(.c) void {
+    const core: *Core = @ptrCast(@alignCast(input));
+    const dt = rl.getFrameTime();
 
-        // Draw
-        //----------------------------------------------------------------------------------
-        rl.beginDrawing();
-        defer rl.endDrawing();
+    for (core.world.items) |*entity| {
+        updateEntity(dt, entity);
+    }
 
-        const bg_color = rl.Color.init(129, 99, 100, 255);
-        rl.clearBackground(bg_color);
+    // Draw
+    //----------------------------------------------------------------------------------
+    rl.beginDrawing();
+    defer rl.endDrawing();
 
-        rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
+    const bg_color = rl.Color.init(129, 99, 100, 255);
+    rl.clearBackground(bg_color);
 
-        for (world.items) |*entity| {
-            drawEntity(entity);
-        }
-        //----------------------------------------------------------------------------------
+    rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
+
+    for (core.world.items) |*entity| {
+        drawEntity(entity);
     }
 }
 
