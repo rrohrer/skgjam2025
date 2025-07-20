@@ -191,8 +191,6 @@ fn mainGameLoop(input: ?*anyopaque) callconv(.c) void {
     const bg_color = rl.Color.init(129, 99, 100, 255);
     rl.clearBackground(bg_color);
 
-    rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
-
     for (core.world.items) |*entity| {
         drawEntity(entity);
     }
@@ -264,10 +262,11 @@ fn updatePlayer(dt: f32, core: *Core, entity: *Entity, player_data: *Entity.Play
     player_data.dt_shoot += dt;
 
     if (shoot_vec.lengthSqr() > 0 and player_data.dt_shoot >= player_data.shoot_speed) {
+        shoot_vec = shoot_vec.normalize();
         const b_scale = rl.Vector2.init(10, 10);
-        const b_pos = entity.position.add(entity.scale.scale(0.5).subtract(b_scale.scale(0.5)));
+        const b_pos = entity.position.add(entity.scale.scale(0.5).subtract(b_scale.scale(0.5))).add(shoot_vec.scale(entity.scale.x * 0.7));
         const bullet = Entity.init(
-            Entity.Data.initBullet(shoot_vec.normalize()),
+            Entity.Data.initBullet(shoot_vec),
             b_pos,
             b_scale,
         );
