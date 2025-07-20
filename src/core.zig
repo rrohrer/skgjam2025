@@ -1,7 +1,6 @@
 const std = @import("std");
 
-const ent = @import("entity.zig");
-const Entity = ent.Entity;
+const Entity = @import("entity.zig").Entity;
 
 pub const Core = struct {
     const Self = @This();

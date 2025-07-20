@@ -4,10 +4,8 @@ const builtin = @import("builtin");
 
 // I think normally you wouldn't do this, im aliasing them because this was all originally
 // in one file and I don't want to have them by namespaces anymore
-const ent = @import("entity.zig");
-const Entity = ent.Entity;
-const co = @import("core.zig");
-const Core = co.Core;
+const Entity = @import("entity.zig").Entity;
+const Core = @import("core.zig").Core;
 
 pub fn main() anyerror!void {
     // set up the allocator that is used. There is a bug in zig's wasm and gpa allocator
