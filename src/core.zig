@@ -9,13 +9,15 @@ pub const Core = struct {
     world: std.ArrayList(Entity),
     additions: std.ArrayList(Entity),
     removals: std.ArrayList(usize),
+    random: std.Random,
 
-    pub fn init(allocator: std.mem.Allocator) Self {
+    pub fn init(allocator: std.mem.Allocator, random: std.Random) Self {
         return Self{
             .allocator = allocator,
             .world = std.ArrayList(Entity).init(allocator),
             .additions = std.ArrayList(Entity).init(allocator),
             .removals = std.ArrayList(usize).init(allocator),
+            .random = random,
         };
     }
 
@@ -42,9 +44,11 @@ pub const Core = struct {
 
     pub fn update(self: *Self) void {
         std.mem.sort(usize, self.removals.items, {}, comptime std.sort.desc(usize));
-        for (self.removals.items) |index| {
-            var entity = self.world.swapRemove(index);
-            entity.deinit();
+        for (self.removals.items, 0..) |index, i| {
+            if (i != 0 and self.removals.items[i - 1] != index) {
+                var entity = self.world.swapRemove(index);
+                entity.deinit();
+            }
         }
 
         self.world.appendSlice(self.additions.items) catch @panic("Ran out of memory moving entity to world.");

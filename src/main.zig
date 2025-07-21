@@ -30,7 +30,10 @@ pub fn main() anyerror!void {
     rl.initWindow(screenWidth, screenHeight, "SKG Jam 2025");
 
     // setup the central parts of the game
-    var core = Core.init(allocator);
+    const seed = rl.getTime();
+    var prng = std.Random.DefaultPrng.init(@intFromFloat(seed));
+    const random = prng.random();
+    var core = Core.init(allocator, random);
     defer core.deinit();
 
     const welcome = Entity.initText(
@@ -116,6 +119,8 @@ fn setupGame(core: *Core, _: f32) al.Action.Status {
     );
     core.addEntity(player);
 
+    spawnBarrel(core);
+
     return .Done;
 }
 
@@ -135,6 +140,13 @@ fn drawEntity(entity: *Entity) void {
             @intFromFloat(entity.scale.y),
             bullet_data.color,
         ),
+        .Barrel => rl.drawRectangle(
+            @intFromFloat(entity.position.x),
+            @intFromFloat(entity.position.y),
+            @intFromFloat(entity.scale.x),
+            @intFromFloat(entity.scale.y),
+            rl.Color.init(191, 133, 101, 255),
+        ),
         .Text => |*text| rl.drawText(
             text.text,
             @intFromFloat(entity.position.x),
@@ -151,6 +163,7 @@ fn updateEntity(dt: f32, core: *Core, entity: *Entity) void {
         .Player => |*player_data| updatePlayer(dt, core, entity, player_data),
         .Bullet => |*bullet_data| updateBullet(dt, core, entity, bullet_data),
         .ActionList => |*list| updateActionList(dt, core, entity, list),
+        .Barrel => updateBarrel(dt, core, entity),
         else => {},
     }
 }
@@ -218,5 +231,42 @@ fn updateActionList(dt: f32, core: *Core, entity: *Entity, list: *al.ActionList)
     list.update(dt);
     if (list.isComplete()) {
         core.removeEntity(entity);
+    }
+}
+
+fn collide(a_pos: rl.Vector2, a_size: rl.Vector2, b_pos: rl.Vector2, b_size: rl.Vector2) bool {
+    const ax_min = a_pos.x;
+    const ax_max = a_pos.x + a_size.x;
+    const ay_min = a_pos.y;
+    const ay_max = a_pos.y + a_size.y;
+    const bx_min = b_pos.x;
+    const bx_max = b_pos.x + b_size.x;
+    const by_min = b_pos.y;
+    const by_max = b_pos.y + b_size.y;
+
+    return ax_min < bx_max and ax_max > bx_min and ay_min < by_max and ay_max > by_min;
+}
+
+fn spawnBarrel(core: *Core) void {
+    const x = core.random.intRangeAtMost(i32, 30, 770);
+    const y = core.random.intRangeAtMost(i32, 30, 420);
+    const barrel = Entity.init(
+        .Barrel,
+        rl.Vector2.init(@floatFromInt(x), @floatFromInt(y)),
+        rl.Vector2.init(15, 25),
+    );
+    core.addEntity(barrel);
+}
+
+fn updateBarrel(_: f32, core: *Core, entity: *Entity) void {
+    for (core.world.items) |*b_entity| {
+        if (b_entity.data == .Bullet) {
+            if (collide(entity.position, entity.scale, b_entity.position, b_entity.scale)) {
+                core.removeEntity(entity);
+                core.removeEntity(b_entity);
+                spawnBarrel(core);
+                return;
+            }
+        }
     }
 }
