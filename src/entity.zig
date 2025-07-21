@@ -1,9 +1,15 @@
 const rl = @import("raylib");
 const std = @import("std");
 
+const al = @import("actionlist.zig");
+const ActionList = al.ActionList;
+const Action = al.Action;
+
+const Core = @import("core.zig").Core;
+
 pub const Entity = struct {
     const Self = @This();
-    const Id = usize;
+    pub const Id = usize;
 
     // gloabal counter of entities so that the are always unique.
     var current_id: Id = 0;
@@ -15,11 +21,22 @@ pub const Entity = struct {
 
     pub const Type = enum {
         Barrel,
-        Floor,
-        Wall,
+        Text,
+        ActionList,
         Player,
         Reaper,
         Bullet,
+    };
+
+    pub const TextData = struct {
+        text: [:0]const u8,
+        allocator: std.mem.Allocator,
+        color: rl.Color,
+        size: i32,
+
+        pub fn deinit(self: *TextData) void {
+            self.allocator.free(self.text);
+        }
     };
 
     pub const BulletData = struct {
@@ -63,8 +80,8 @@ pub const Entity = struct {
 
     pub const Data = union(Type) {
         Barrel: void,
-        Floor: void,
-        Wall: void,
+        Text: TextData,
+        ActionList: ActionList,
         Player: PlayerData,
         Reaper: void,
         Bullet: BulletData,
@@ -82,5 +99,75 @@ pub const Entity = struct {
         const id = current_id;
         current_id += 1;
         return Entity{ .data = data, .position = position, .scale = scale, .id = id };
+    }
+
+    pub fn initActionList(list: ActionList) Self {
+        return Self.init(Data{ .ActionList = list }, rl.Vector2.zero(), rl.Vector2.zero());
+    }
+
+    pub fn initText(
+        allocator: std.mem.Allocator,
+        text: [:0]const u8,
+        position: rl.Vector2,
+        size: i32,
+        color: rl.Color,
+    ) Self {
+        const ctext = allocator.dupeZ(u8, text) catch @panic("Ran out of memory creating text");
+
+        const text_data = TextData{
+            .text = ctext,
+            .allocator = allocator,
+            .size = size,
+            .color = color,
+        };
+        return Self.init(
+            Data{ .Text = text_data },
+            position,
+            rl.Vector2.zero(),
+        );
+    }
+
+    pub fn deinit(self: *Self) void {
+        switch (self.data) {
+            .Text => |*t| t.deinit(),
+            .ActionList => |*a| a.deinit(),
+            else => {},
+        }
+    }
+};
+
+pub const RemoveEntitiesAction = struct {
+    list: std.ArrayList(Entity.Id),
+    core: *Core,
+
+    fn update(userdata: *anyopaque, _: f32) Action.Status {
+        const self: *RemoveEntitiesAction = @ptrCast(@alignCast(userdata));
+
+        for (self.list.items) |id| {
+            const entity = self.core.getEntity(id) orelse continue;
+            self.core.removeEntity(entity);
+        }
+
+        return .Done;
+    }
+
+    fn deinit(userdata: *anyopaque, allocator: std.mem.Allocator) void {
+        const self: *RemoveEntitiesAction = @ptrCast(@alignCast(userdata));
+        self.list.deinit();
+        allocator.destroy(self);
+    }
+
+    pub fn init(core: *Core, entities: []const Entity.Id) Action {
+        const remove = core.allocator.create(RemoveEntitiesAction) catch @panic("Ran out of memory creating RemoveEntitiesAction");
+        remove.* = .{ .list = std.ArrayList(Entity.Id).init(core.allocator), .core = core };
+        remove.list.appendSlice(entities) catch @panic("Ran out of memory adding entities to list");
+        return Action{
+            .userdata = remove,
+            .allocator = core.allocator,
+            .vtable = &.{
+                .update = update,
+                .deinit = deinit,
+            },
+        };
     }
 };

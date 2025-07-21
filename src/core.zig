@@ -5,12 +5,14 @@ const Entity = @import("entity.zig").Entity;
 pub const Core = struct {
     const Self = @This();
 
+    allocator: std.mem.Allocator,
     world: std.ArrayList(Entity),
     additions: std.ArrayList(Entity),
     removals: std.ArrayList(usize),
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
+            .allocator = allocator,
             .world = std.ArrayList(Entity).init(allocator),
             .additions = std.ArrayList(Entity).init(allocator),
             .removals = std.ArrayList(usize).init(allocator),
@@ -18,6 +20,12 @@ pub const Core = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        for (self.world.items) |*e| {
+            e.deinit();
+        }
+        for (self.additions.items) |*e| {
+            e.deinit();
+        }
         self.world.deinit();
         self.removals.deinit();
         self.additions.deinit();
@@ -33,8 +41,10 @@ pub const Core = struct {
     }
 
     pub fn update(self: *Self) void {
+        std.mem.sort(usize, self.removals.items, {}, comptime std.sort.desc(usize));
         for (self.removals.items) |index| {
-            _ = self.world.swapRemove(index);
+            var entity = self.world.swapRemove(index);
+            entity.deinit();
         }
 
         self.world.appendSlice(self.additions.items) catch @panic("Ran out of memory moving entity to world.");
@@ -45,5 +55,12 @@ pub const Core = struct {
 
     fn getEntityIndex(self: *const Core, entity: *const Entity) usize {
         return entity - &self.world.items[0];
+    }
+
+    pub fn getEntity(self: *Self, id: Entity.Id) ?*Entity {
+        for (self.world.items) |*entity| {
+            if (entity.id == id) return entity;
+        }
+        return null;
     }
 };

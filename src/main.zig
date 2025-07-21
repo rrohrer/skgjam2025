@@ -4,8 +4,11 @@ const builtin = @import("builtin");
 
 // I think normally you wouldn't do this, im aliasing them because this was all originally
 // in one file and I don't want to have them by namespaces anymore
-const Entity = @import("entity.zig").Entity;
+const en = @import("entity.zig");
+const Entity = en.Entity;
 const Core = @import("core.zig").Core;
+
+const al = @import("actionlist.zig");
 
 pub fn main() anyerror!void {
     // set up the allocator that is used. There is a bug in zig's wasm and gpa allocator
@@ -36,6 +39,46 @@ pub fn main() anyerror!void {
         rl.Vector2.init(20, 20),
     );
     core.addEntity(player);
+
+    const welcome = Entity.initText(
+        core.allocator,
+        "Welcome... your time is limited...",
+        rl.Vector2.init(100, 50),
+        40,
+        .white,
+    );
+
+    const wasd = Entity.initText(
+        core.allocator,
+        "W A S D to move    Arrows to shoot",
+        rl.Vector2.init(150, 100),
+        30,
+        .white,
+    );
+    const space = Entity.initText(
+        core.allocator,
+        "Press [space] to start...",
+        rl.Vector2.init(200, 150),
+        30,
+        .white,
+    );
+
+    const actions = [_]al.Action{
+        al.WaitAction.init(core.allocator, 1),
+        al.WaitOnKeypressAction.init(core.allocator, .space),
+        en.RemoveEntitiesAction.init(&core, &.{
+            welcome.id,
+            wasd.id,
+            space.id,
+        }),
+    };
+    var list = al.ActionList.init(core.allocator);
+    list.appendSlice(&actions);
+
+    core.addEntity(welcome);
+    core.addEntity(wasd);
+    core.addEntity(space);
+    core.addEntity(Entity.initActionList(list));
 
     // run the game loop, note this is different for wasm or desktop
     switch (builtin.os.tag) {
@@ -87,6 +130,13 @@ fn drawEntity(entity: *Entity) void {
             @intFromFloat(entity.scale.y),
             bullet_data.color,
         ),
+        .Text => |*text| rl.drawText(
+            text.text,
+            @intFromFloat(entity.position.x),
+            @intFromFloat(entity.position.y),
+            text.size,
+            text.color,
+        ),
         else => {},
     }
 }
@@ -95,6 +145,7 @@ fn updateEntity(dt: f32, core: *Core, entity: *Entity) void {
     switch (entity.data) {
         .Player => |*player_data| updatePlayer(dt, core, entity, player_data),
         .Bullet => |*bullet_data| updateBullet(dt, core, entity, bullet_data),
+        .ActionList => |*list| updateActionList(dt, core, entity, list),
         else => {},
     }
 }
@@ -154,6 +205,13 @@ fn updateBullet(dt: f32, core: *Core, entity: *Entity, bullet_data: *Entity.Bull
     entity.position = entity.position.add(bullet_data.direction.scale(bullet_data.speed * dt));
     bullet_data.dt += dt;
     if (bullet_data.dt >= bullet_data.lifetime) {
+        core.removeEntity(entity);
+    }
+}
+
+fn updateActionList(dt: f32, core: *Core, entity: *Entity, list: *al.ActionList) void {
+    list.update(dt);
+    if (list.isComplete()) {
         core.removeEntity(entity);
     }
 }
