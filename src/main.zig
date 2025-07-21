@@ -33,13 +33,6 @@ pub fn main() anyerror!void {
     var core = Core.init(allocator);
     defer core.deinit();
 
-    const player = Entity.init(
-        Entity.Data.initPlayer(),
-        rl.Vector2.init(50, 50),
-        rl.Vector2.init(20, 20),
-    );
-    core.addEntity(player);
-
     const welcome = Entity.initText(
         core.allocator,
         "Welcome... your time is limited...",
@@ -71,6 +64,7 @@ pub fn main() anyerror!void {
             wasd.id,
             space.id,
         }),
+        al.FunctionCallAction.init(&core, setupGame),
     };
     var list = al.ActionList.init(core.allocator);
     list.appendSlice(&actions);
@@ -112,6 +106,17 @@ fn mainGameLoop(input: ?*anyopaque) callconv(.c) void {
     for (core.world.items) |*entity| {
         drawEntity(entity);
     }
+}
+
+fn setupGame(core: *Core, _: f32) al.Action.Status {
+    const player = Entity.init(
+        Entity.Data.initPlayer(),
+        rl.Vector2.init(50, 50),
+        rl.Vector2.init(20, 20),
+    );
+    core.addEntity(player);
+
+    return .Done;
 }
 
 fn drawEntity(entity: *Entity) void {

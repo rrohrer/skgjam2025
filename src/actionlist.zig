@@ -140,7 +140,7 @@ pub const FunctionCallAction = struct {
     }
 
     pub fn init(core: *Core, func: *const fn (core: *Core, dt: f32) Action.Status) Action {
-        const f = core.allocator.create(FunctionCallAction);
+        const f = core.allocator.create(FunctionCallAction) catch @panic("Ran out of memory initializing func action");
         f.* = .{
             .func = func,
             .core = core,
@@ -148,7 +148,7 @@ pub const FunctionCallAction = struct {
         return Action{
             .userdata = f,
             .allocator = core.allocator,
-            .vtable = .{
+            .vtable = &.{
                 .update = update,
                 .deinit = deinit,
             },
