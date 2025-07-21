@@ -10,31 +10,10 @@ const Core = @import("core.zig").Core;
 
 const al = @import("actionlist.zig");
 
-pub fn main() anyerror!void {
-    // set up the allocator that is used. There is a bug in zig's wasm and gpa allocator
-    // where they crash in emscripten. For now you have to use the C allocator.
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = if (builtin.os.tag == .emscripten) std.heap.c_allocator else gpa.allocator();
-    defer {
-        if (builtin.os.tag != .emscripten) {
-            const deinit_status = gpa.deinit();
-            if (deinit_status == .leak) std.testing.expect(false) catch @panic("There were leaks in the program.");
-        }
+fn titleScreen(core: *Core) void {
+    for (core.world.items) |*e| {
+        core.removeEntity(e);
     }
-
-    // window details
-    const screenWidth = 800;
-    const screenHeight = 450;
-    rl.setConfigFlags(.{ .window_highdpi = true, .vsync_hint = true });
-
-    rl.initWindow(screenWidth, screenHeight, "SKG Jam 2025");
-
-    // setup the central parts of the game
-    const seed = rl.getTime();
-    var prng = std.Random.DefaultPrng.init(@intFromFloat(seed));
-    const random = prng.random();
-    var core = Core.init(allocator, random);
-    defer core.deinit();
 
     const welcome = Entity.initText(
         core.allocator,
@@ -62,12 +41,12 @@ pub fn main() anyerror!void {
     const actions = [_]al.Action{
         al.WaitAction.init(core.allocator, 1),
         al.WaitOnKeypressAction.init(core.allocator, .space),
-        en.RemoveEntitiesAction.init(&core, &.{
+        en.RemoveEntitiesAction.init(core, &.{
             welcome.id,
             wasd.id,
             space.id,
         }),
-        al.FunctionCallAction.init(&core, setupGame),
+        al.FunctionCallAction.init(core, setupGame),
     };
     var list = al.ActionList.init(core.allocator);
     list.appendSlice(&actions);
@@ -76,6 +55,35 @@ pub fn main() anyerror!void {
     core.addEntity(wasd);
     core.addEntity(space);
     core.addEntity(Entity.initActionList(list));
+}
+
+pub fn main() anyerror!void {
+    // set up the allocator that is used. There is a bug in zig's wasm and gpa allocator
+    // where they crash in emscripten. For now you have to use the C allocator.
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = if (builtin.os.tag == .emscripten) std.heap.c_allocator else gpa.allocator();
+    defer {
+        if (builtin.os.tag != .emscripten) {
+            const deinit_status = gpa.deinit();
+            if (deinit_status == .leak) std.testing.expect(false) catch @panic("There were leaks in the program.");
+        }
+    }
+
+    // window details
+    const screenWidth = 800;
+    const screenHeight = 450;
+    rl.setConfigFlags(.{ .window_highdpi = true, .vsync_hint = true });
+
+    rl.initWindow(screenWidth, screenHeight, "SKG Jam 2025");
+
+    // setup the central parts of the game
+    const seed = rl.getTime();
+    var prng = std.Random.DefaultPrng.init(@intFromFloat(seed));
+    const random = prng.random();
+    var core = Core.init(allocator, random);
+    defer core.deinit();
+
+    titleScreen(&core);
 
     // run the game loop, note this is different for wasm or desktop
     switch (builtin.os.tag) {
@@ -114,7 +122,7 @@ fn mainGameLoop(input: ?*anyopaque) callconv(.c) void {
 fn setupGame(core: *Core, _: f32) al.Action.Status {
     const player = Entity.init(
         Entity.Data.initPlayer(),
-        rl.Vector2.init(50, 50),
+        rl.Vector2.init(200, 200),
         rl.Vector2.init(20, 20),
     );
     core.addEntity(player);
@@ -217,6 +225,30 @@ fn updatePlayer(dt: f32, core: *Core, entity: *Entity, player_data: *Entity.Play
         core.addEntity(bullet);
         player_data.dt_shoot = 0;
     }
+
+    player_data.dt_life += dt;
+    if (player_data.dt_life >= 1) {
+        player_data.health -= 1;
+        player_data.dt_life = 0;
+    }
+
+    if (core.score != player_data.last_score) {
+        player_data.last_score = core.score;
+        player_data.health += 1;
+    }
+
+    const health = std.fmt.allocPrintZ(core.allocator, "{d}", .{player_data.health}) catch @panic("Health error");
+    defer core.allocator.free(health);
+    rl.drawText(health, 20, 20, 30, .white);
+
+    const score = std.fmt.allocPrintZ(core.allocator, "Score: {d}", .{core.score}) catch @panic("score error");
+    defer core.allocator.free(score);
+    rl.drawText(score, 20, 50, 30, .white);
+
+    if (player_data.health <= 0) {
+        titleScreen(core);
+        core.score = 0;
+    }
 }
 
 fn updateBullet(dt: f32, core: *Core, entity: *Entity, bullet_data: *Entity.BulletData) void {
@@ -265,6 +297,7 @@ fn updateBarrel(_: f32, core: *Core, entity: *Entity) void {
                 core.removeEntity(entity);
                 core.removeEntity(b_entity);
                 spawnBarrel(core);
+                core.score += 1;
                 return;
             }
         }

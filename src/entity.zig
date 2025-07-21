@@ -63,15 +63,19 @@ pub const Entity = struct {
         health: i32,
         move_speed: f32,
         dt_shoot: f32,
+        dt_life: f32,
         shoot_speed: f32,
         color: rl.Color,
+        last_score: i32,
 
         pub fn init() PlayerData {
             const shoot_speed = 0.05;
             return PlayerData{
-                .health = 100,
+                .health = 10,
+                .last_score = 0,
                 .move_speed = 200,
                 .dt_shoot = shoot_speed,
+                .dt_life = 0,
                 .shoot_speed = shoot_speed,
                 .color = rl.Color.init(72, 255, 185, 255),
             };

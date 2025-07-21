@@ -10,6 +10,7 @@ pub const Core = struct {
     additions: std.ArrayList(Entity),
     removals: std.ArrayList(usize),
     random: std.Random,
+    score: i32,
 
     pub fn init(allocator: std.mem.Allocator, random: std.Random) Self {
         return Self{
@@ -18,6 +19,7 @@ pub const Core = struct {
             .additions = std.ArrayList(Entity).init(allocator),
             .removals = std.ArrayList(usize).init(allocator),
             .random = random,
+            .score = 0,
         };
     }
 
@@ -38,17 +40,15 @@ pub const Core = struct {
     }
 
     pub fn removeEntity(self: *Self, entity: *Entity) void {
-        const index = self.getEntityIndex(entity);
-        self.removals.append(index) catch @panic("Ran out of memory trying to remove and entity");
+        self.removals.append(entity.id) catch @panic("Ran out of memory trying to remove and entity");
     }
 
     pub fn update(self: *Self) void {
-        std.mem.sort(usize, self.removals.items, {}, comptime std.sort.desc(usize));
-        for (self.removals.items, 0..) |index, i| {
-            if (i != 0 and self.removals.items[i - 1] != index) {
-                var entity = self.world.swapRemove(index);
-                entity.deinit();
-            }
+        for (self.removals.items) |id| {
+            const e = self.getEntity(id) orelse continue;
+            const index = self.getEntityIndex(e);
+            var entity = self.world.swapRemove(index);
+            entity.deinit();
         }
 
         self.world.appendSlice(self.additions.items) catch @panic("Ran out of memory moving entity to world.");
